@@ -13,6 +13,14 @@ interface Winner {
   avatar: string;
 }
 
+// Fallback demo data
+const FALLBACK_WINNERS: Winner[] = [
+  { id: 1, username: 'SlotMaster99', amount: '1250.00 SC', game: 'CoinKrazy-CoinUp', time: '2m ago', avatar: '1' },
+  { id: 2, username: 'LuckyLady', amount: '500.00 SC', game: 'CoinKrazy-Hot', time: '5m ago', avatar: '2' },
+  { id: 3, username: 'CoinKing', amount: '850.50 SC', game: 'CoinKrazy-Thunder', time: '8m ago', avatar: '3' },
+  { id: 4, username: 'DiceRoller', amount: '1250.00 SC', game: 'CoinKrazy-4Wolfs', time: '12m ago', avatar: '4' },
+];
+
 export const RecentWinners = () => {
   const [winners, setWinners] = useState<Winner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,24 +46,32 @@ export const RecentWinners = () => {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+          console.warn(`[RecentWinners] API returned ${response.status}`);
           if (isMounted) {
+            setWinners(FALLBACK_WINNERS);
             setIsLoading(false);
           }
           return;
         }
+
         const result = await response.json();
         if (result.success && result.data && Array.isArray(result.data)) {
           if (isMounted) {
             setWinners(result.data);
+            setIsLoading(false);
+          }
+        } else {
+          // Invalid response format, use fallback
+          if (isMounted) {
+            setWinners(FALLBACK_WINNERS);
+            setIsLoading(false);
           }
         }
       } catch (error) {
-        // Silently fail - this is non-critical
+        // Network error or timeout - use fallback data
+        console.warn('[RecentWinners] Fetch failed, using fallback data:', error instanceof Error ? error.message : 'Unknown error');
         if (isMounted) {
-          setIsLoading(false);
-        }
-      } finally {
-        if (isMounted) {
+          setWinners(FALLBACK_WINNERS);
           setIsLoading(false);
         }
       }
