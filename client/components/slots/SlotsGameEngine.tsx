@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Zap, Volume2, VolumeX, Settings } from 'lucide-react';
+import { Loader2, Zap, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
+import { slots, wallet } from '@/lib/api';
 import confetti from 'canvas-confetti';
 
 interface SlotsGameEngineProps {
-  gameId?: number;
+  gameId?: number | string;
   gameName?: string;
 }
 
@@ -27,7 +28,7 @@ interface GameState {
   lastWinnings: number;
   totalWinnings: number;
   spinHistory: SpinResult[];
-  soundEnabled: boolean;
+  loadingBalance: boolean;
 }
 
 interface SpinResult {
@@ -37,30 +38,44 @@ interface SpinResult {
   timestamp: number;
 }
 
-const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'Mega Spin Slots' }) => {
+const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId = 1, gameName = 'Mega Spin Slots' }) => {
   const { user } = useAuth();
   const [gameState, setGameState] = useState<GameState>({
-    balance: 1000,
+    balance: 0,
     currentBet: 1,
     spinning: false,
     reels: Array(REELS).fill(Array(ROWS).fill('❓')),
     lastWinnings: 0,
     totalWinnings: 0,
     spinHistory: [],
-    soundEnabled: true,
+    loadingBalance: true,
   });
 
-  // Load user balance on mount
+  // Load user balance from server on mount
   useEffect(() => {
+    const loadBalance = async () => {
+      try {
+        const response = await wallet.getBalance();
+        if (response.success && response.data) {
+          setGameState(prev => ({
+            ...prev,
+            balance: response.data.sc_balance || 0,
+            loadingBalance: false,
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load balance:', error);
+        toast.error('Failed to load balance');
+        setGameState(prev => ({ ...prev, loadingBalance: false }));
+      }
+    };
+
     if (user) {
-      setGameState(prev => ({
-        ...prev,
-        balance: (user as any).sc_balance || 1000,
-      }));
+      loadBalance();
     }
   }, [user]);
 
-  const generateReels = (): string[][] => {
+  const generateRandomReels = (): string[][] => {
     const newReels: string[][] = [];
     for (let i = 0; i < REELS; i++) {
       const reel: string[] = [];
@@ -70,34 +85,6 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
       newReels.push(reel);
     }
     return newReels;
-  };
-
-  const checkWin = (reels: string[][]): number => {
-    let winnings = 0;
-
-    // Check middle row
-    const middleRow = reels.map(reel => reel[1]);
-    if (middleRow[0] === middleRow[1] && middleRow[1] === middleRow[2]) {
-      const symbol = middleRow[0];
-      const symbolIndex = SYMBOLS.indexOf(symbol);
-      const multiplier = [2, 2.5, 3, 3.5, 4, 5, 7.5, 10][symbolIndex];
-      winnings += gameState.currentBet * multiplier * 100;
-    }
-
-    // Check diagonals
-    if (reels[0][0] === reels[1][1] && reels[1][1] === reels[2][2]) {
-      const symbolIndex = SYMBOLS.indexOf(reels[1][1]);
-      const multiplier = [2, 2.5, 3, 3.5, 4, 5, 7.5, 10][symbolIndex];
-      winnings += gameState.currentBet * multiplier * 50;
-    }
-
-    if (reels[0][2] === reels[1][1] && reels[1][1] === reels[2][0]) {
-      const symbolIndex = SYMBOLS.indexOf(reels[1][1]);
-      const multiplier = [2, 2.5, 3, 3.5, 4, 5, 7.5, 10][symbolIndex];
-      winnings += gameState.currentBet * multiplier * 50;
-    }
-
-    return Math.min(winnings, 10); // Max 10 SC win for compliance
   };
 
   const playSpin = async () => {
@@ -114,84 +101,109 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
     setGameState(prev => ({
       ...prev,
       spinning: true,
-      balance: prev.balance - prev.currentBet,
     }));
 
-    // Animate spinning
-    for (let i = 0; i < 20; i++) {
-      await new Promise(resolve => setTimeout(resolve, 50));
-      setGameState(prev => ({
-        ...prev,
-        reels: generateReels(),
-      }));
-    }
+    try {
+      // Animate spinning with random reels
+      for (let i = 0; i < 15; i++) {
+        await new Promise(resolve => setTimeout(resolve, 80));
+        setGameState(prev => ({
+          ...prev,
+          reels: generateRandomReels(),
+        }));
+      }
 
-    const finalReels = generateReels();
-    setGameState(prev => ({
-      ...prev,
-      reels: finalReels,
-    }));
+      // Call server to process the spin
+      // Server will calculate the win based on fair RNG
+      const response = await slots.spin(
+        gameId,
+        gameState.currentBet
+      );
 
-    const winnings = checkWin(finalReels);
-    const newBalance = gameState.balance - gameState.currentBet + winnings;
+      if (response && response.success !== false) {
+        // Server returned the result
+        const winnings = response.win || 0;
+        const newBalance = response.balance?.sc || gameState.balance;
 
-    if (winnings > 0) {
-      toast.success(`🎉 Big Win! ${winnings.toFixed(2)} SC!`);
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
+        // Display final reels (could be from server or generated)
+        const finalReels = generateRandomReels();
+        setGameState(prev => ({
+          ...prev,
+          reels: finalReels,
+          balance: newBalance,
+        }));
 
-      // Record spin result
-      const spinResult: SpinResult = {
-        bet: gameState.currentBet,
-        winnings,
-        symbols: finalReels.map(r => r[1]).join(''),
-        timestamp: Date.now(),
-      };
+        if (winnings > 0) {
+          toast.success(`🎉 You won ${winnings.toFixed(2)} SC!`);
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
 
-      setGameState(prev => ({
-        ...prev,
-        spinning: false,
-        lastWinnings: winnings,
-        totalWinnings: prev.totalWinnings + winnings,
-        balance: newBalance,
-        spinHistory: [spinResult, ...prev.spinHistory].slice(0, 20),
-      }));
-
-      // Send to server
-      try {
-        await fetch('/api/slots/spin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            gameId,
+          const spinResult: SpinResult = {
             bet: gameState.currentBet,
             winnings,
             symbols: finalReels.map(r => r[1]).join(''),
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to record spin:', error);
+            timestamp: Date.now(),
+          };
+
+          setGameState(prev => ({
+            ...prev,
+            spinning: false,
+            lastWinnings: winnings,
+            totalWinnings: prev.totalWinnings + winnings,
+            spinHistory: [spinResult, ...prev.spinHistory].slice(0, 20),
+          }));
+        } else {
+          toast.info('No match this time - try again!');
+          setGameState(prev => ({
+            ...prev,
+            spinning: false,
+            lastWinnings: 0,
+          }));
+        }
       }
-    } else {
-      toast.info('No match - try again!');
+    } catch (error: any) {
+      console.error('Spin error:', error);
+      const errorMsg = error?.details?.error || error?.message || 'Spin failed';
+      toast.error(errorMsg);
+
+      // Reload balance on error
+      try {
+        const response = await wallet.getBalance();
+        if (response.success && response.data) {
+          setGameState(prev => ({
+            ...prev,
+            spinning: false,
+            balance: response.data.sc_balance || 0,
+          }));
+        }
+      } catch (e) {
+        console.error('Failed to reload balance:', e);
+      }
+
       setGameState(prev => ({
         ...prev,
         spinning: false,
-        lastWinnings: 0,
-        balance: newBalance,
       }));
     }
   };
+
+  if (gameState.loadingBalance) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-12 h-12 animate-spin text-yellow-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
       {/* Game Header */}
       <div className="text-center space-y-2">
         <h1 className="text-5xl font-black italic uppercase text-white">{gameName}</h1>
-        <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">5X RTP | HIGH VOLATILITY</p>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">SERVER-VERIFIED | FAIR RTP</p>
       </div>
 
       {/* Game Board */}
@@ -209,7 +221,7 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
                         className={`
                           w-full h-32 flex items-center justify-center text-6xl font-black rounded-2xl border-2
                           ${rowIdx === 1 ? 'border-yellow-500 bg-yellow-500/20 shadow-lg shadow-yellow-500/50' : 'border-slate-600 bg-slate-800'}
-                          ${gameState.spinning ? 'animate-spin' : ''}
+                          ${gameState.spinning ? 'animate-pulse' : ''}
                           transition-all duration-300
                         `}
                       >
@@ -236,7 +248,7 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
                 <p className="text-xs text-slate-500">SC</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <p className="text-slate-400 text-sm font-bold uppercase">Total Won</p>
+                <p className="text-slate-400 text-sm font-bold uppercase">Session Won</p>
                 <p className="text-3xl font-black text-yellow-400">{gameState.totalWinnings.toFixed(2)}</p>
                 <p className="text-xs text-slate-500">SC</p>
               </div>
@@ -255,15 +267,15 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
                     value={gameState.currentBet}
                     onChange={(e) => setGameState(prev => ({
                       ...prev,
-                      currentBet: parseFloat(e.target.value) || MIN_BET,
+                      currentBet: Math.min(MAX_BET, Math.max(MIN_BET, parseFloat(e.target.value) || MIN_BET)),
                     }))}
                     disabled={gameState.spinning}
                     className="bg-slate-800 border-slate-700"
                   />
                   <Button
                     onClick={playSpin}
-                    disabled={gameState.spinning || gameState.balance < gameState.currentBet}
-                    className="flex-1 h-12 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-black text-lg italic rounded-xl"
+                    disabled={gameState.spinning || gameState.balance < gameState.currentBet || gameState.loadingBalance}
+                    className="flex-1 h-12 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-black text-lg italic rounded-xl disabled:opacity-50"
                   >
                     {gameState.spinning ? (
                       <>
@@ -287,8 +299,8 @@ const SlotsGameEngine: React.FC<SlotsGameEngineProps> = ({ gameId, gameName = 'M
                     key={amount}
                     variant="outline"
                     size="sm"
-                    onClick={() => setGameState(prev => ({ ...prev, currentBet: amount }))}
-                    disabled={gameState.spinning}
+                    onClick={() => setGameState(prev => ({ ...prev, currentBet: Math.min(amount, MAX_BET) }))}
+                    disabled={gameState.spinning || amount > gameState.balance}
                     className="text-xs font-bold"
                   >
                     ${amount}

@@ -74,27 +74,73 @@ const generateDeck = (): Card[] => {
   return deck.sort(() => Math.random() - 0.5);
 };
 
+const RANK_VALUES = {
+  'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10,
+  '9': 9, '8': 8, '7': 7, '6': 6, '5': 5,
+  '4': 4, '3': 3, '2': 2
+};
+
 const evaluateHand = (hole: Card[], community: Card[]): { hand: string; rank: number } => {
-  // Simplified hand evaluation
   const allCards = [...hole, ...community];
-  
-  // Check pairs
+
+  // Count ranks and suits
   const rankCounts = new Map<string, number>();
+  const suitCounts = new Map<string, number>();
+
   for (const card of allCards) {
     rankCounts.set(card.rank, (rankCounts.get(card.rank) || 0) + 1);
+    suitCounts.set(card.suit, (suitCounts.get(card.suit) || 0) + 1);
   }
 
-  const pairs = Array.from(rankCounts.entries())
-    .filter(([_, count]) => count >= 2)
-    .sort((a, b) => b[1] - a[1]);
+  // Check for flush (5 cards of same suit)
+  const isFlush = Array.from(suitCounts.values()).some(count => count >= 5);
 
-  if (pairs.length >= 2) {
-    return { hand: 'Two Pair', rank: 5 };
-  }
-  if (pairs.length === 1) {
-    if (pairs[0][1] === 3) {
-      return { hand: 'Three of a Kind', rank: 6 };
+  // Check for straight (5 consecutive cards)
+  const sortedRanks = Array.from(
+    new Set(allCards.map(c => RANK_VALUES[c.rank as keyof typeof RANK_VALUES]))
+  ).sort((a, b) => b - a);
+
+  let isStraight = false;
+  for (let i = 0; i <= sortedRanks.length - 5; i++) {
+    if (sortedRanks[i] - sortedRanks[i + 4] === 4) {
+      isStraight = true;
+      break;
     }
+  }
+
+  // Check for pairs, three of a kind, four of a kind
+  const pairs = Array.from(rankCounts.entries())
+    .filter(([_, count]) => count === 2)
+    .length;
+
+  const threeOfAKind = Array.from(rankCounts.entries())
+    .filter(([_, count]) => count === 3)
+    .length > 0;
+
+  const fourOfAKind = Array.from(rankCounts.entries())
+    .filter(([_, count]) => count === 4)
+    .length > 0;
+
+  // Determine hand ranking (higher number = better hand)
+  if (fourOfAKind) {
+    return { hand: 'Four of a Kind', rank: 8 };
+  }
+  if (threeOfAKind && pairs >= 1) {
+    return { hand: 'Full House', rank: 7 };
+  }
+  if (isFlush) {
+    return { hand: 'Flush', rank: 6 };
+  }
+  if (isStraight) {
+    return { hand: 'Straight', rank: 5 };
+  }
+  if (threeOfAKind) {
+    return { hand: 'Three of a Kind', rank: 4 };
+  }
+  if (pairs >= 2) {
+    return { hand: 'Two Pair', rank: 3 };
+  }
+  if (pairs === 1) {
     return { hand: 'One Pair', rank: 2 };
   }
 
