@@ -1,22 +1,38 @@
-FROM node:20-alpine
+# Build stage
+FROM node:22-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm@10.14.0
+# Copy package files
+COPY package.json package-lock.json* pnpm-lock.yaml* .npmrc* ./
 
-# Copy package files first (for better layer caching)
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
+# Install dependencies using npm
+RUN npm install --legacy-peer-deps
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
-
-# Copy the entire project
+# Copy source code
 COPY . .
 
-# Expose ports
-EXPOSE 8080 5173
+# Build the application
+RUN npm run build
 
-# Start the development server
-CMD ["pnpm", "dev"]
+# Production stage
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install dependencies for production only
+COPY package.json package-lock.json* pnpm-lock.yaml* .npmrc* ./
+RUN npm install --legacy-peer-deps --omit=dev
+
+# Copy built application from builder
+COPY --from=builder /app/dist ./dist
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8080/api/ping', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Start the application
+CMD ["npm", "start"]

@@ -2,34 +2,49 @@ version: '3.8'
 
 services:
   app:
-    # Build from the cloned repository
     build:
       context: .
       dockerfile: Dockerfile
-    
-    # Container name for easy reference
     container_name: coinkrazy-app
-    
-    # Expose ports
     ports:
-      - "8080:8080"  # Development server
-      - "5173:5173"  # Vite dev server (if needed)
-    
-    # Environment variables
+      - "8080:8080"
     environment:
-      - NODE_ENV=development
-      # Add your other environment variables here
-      # - DATABASE_URL=your_database_url
-      # - API_KEY=your_api_key
-    
-    # Mount volumes for hot reload
-    volumes:
-      - .:/app
-      - /app/node_modules  # Prevent node_modules from being overwritten
-    
-    # Keep container running
-    stdin_open: true
-    tty: true
-    
-    # Restart policy
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - VITE_PUBLIC_BUILDER_KEY=${VITE_PUBLIC_BUILDER_KEY}
+      - PING_MESSAGE=${PING_MESSAGE}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - coinkrazy-network
+    volumes:
+      - ./logs:/app/logs
+
+  db:
+    image: postgres:16-alpine
+    container_name: coinkrazy-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-neondb_owner}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-neondb}
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - coinkrazy-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-neondb_owner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  coinkrazy-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
