@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    # Build from the cloned repository
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Container name for easy reference
+    container_name: coinkrazy-app
+    
+    # Expose ports
+    ports:
+      - "8080:8080"  # Development server
+      - "5173:5173"  # Vite dev server (if needed)
+    
+    # Environment variables
+    environment:
+      - NODE_ENV=development
+      # Add your other environment variables here
+      # - DATABASE_URL=your_database_url
+      # - API_KEY=your_api_key
+    
+    # Mount volumes for hot reload
+    volumes:
+      - .:/app
+      - /app/node_modules  # Prevent node_modules from being overwritten
+    
+    # Keep container running
+    stdin_open: true
+    tty: true
+    
+    # Restart policy
+    restart: unless-stopped
