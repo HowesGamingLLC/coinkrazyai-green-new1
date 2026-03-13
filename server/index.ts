@@ -82,6 +82,14 @@ import {
   handleUpdateConfig as updatePokerConfig
 } from "./routes/poker";
 import {
+  handleGetPoolTables,
+  handleCreatePoolTable,
+  handleJoinPoolTable,
+  handleGetPoolGame,
+  handleRaiseBet,
+  handleEndPoolGame
+} from "./routes/pool";
+import {
   handleGetBingoRooms,
   handleBuyBingoTicket,
   handleMarkNumber,
@@ -532,6 +540,14 @@ export function createServer() {
   app.post("/api/poker/cash-out", verifyPlayer, handleCashOut);
   app.get("/api/poker/config", getPokerConfig);
   app.post("/api/poker/config/update", verifyAdmin, updatePokerConfig);
+
+  // ===== POOL SHARK ROUTES =====
+  app.get("/api/pool/tables", handleGetPoolTables);
+  app.post("/api/pool/create-table", verifyPlayer, handleCreatePoolTable);
+  app.post("/api/pool/join-table", verifyPlayer, handleJoinPoolTable);
+  app.get("/api/pool/game/:gameId", handleGetPoolGame);
+  app.post("/api/pool/raise-bet", verifyPlayer, handleRaiseBet);
+  app.post("/api/pool/end-game", verifyPlayer, handleEndPoolGame);
 
   // ===== BINGO ROUTES =====
   app.get("/api/bingo/rooms", handleGetBingoRooms);

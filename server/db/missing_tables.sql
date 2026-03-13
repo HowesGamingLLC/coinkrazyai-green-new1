@@ -463,3 +463,70 @@ CREATE TABLE IF NOT EXISTS ai_rate_limits (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(player_id, endpoint)
 );
+
+-- 13. Pool Shark Game Tables
+CREATE TABLE IF NOT EXISTS pool_tables (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    min_buy_in DECIMAL(15, 2) NOT NULL DEFAULT 5.0,
+    max_buy_in DECIMAL(15, 2) NOT NULL DEFAULT 1000.0,
+    max_players INTEGER DEFAULT 2,
+    status VARCHAR(50) DEFAULT 'active', -- 'active', 'inactive', 'maintenance'
+    house_fee DECIMAL(15, 2) DEFAULT 0.50,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_games (
+    id SERIAL PRIMARY KEY,
+    table_id INTEGER REFERENCES pool_tables(id) ON DELETE CASCADE,
+    creator_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'waiting', -- 'waiting', 'in-progress', 'finished'
+    total_pot DECIMAL(15, 2) NOT NULL DEFAULT 0.0,
+    winner_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    game_duration_seconds INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_game_players (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER REFERENCES pool_games(id) ON DELETE CASCADE,
+    player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+    username VARCHAR(255) NOT NULL,
+    buy_in DECIMAL(15, 2) NOT NULL,
+    balls_type VARCHAR(50), -- 'solid', 'stripe', 'none'
+    balls_hit TEXT[] DEFAULT '{}', -- array of ball numbers hit
+    status VARCHAR(50) DEFAULT 'active', -- 'active', 'eliminated', 'winner'
+    is_current_turn BOOLEAN DEFAULT FALSE,
+    turn_count INTEGER DEFAULT 0,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(game_id, player_id)
+);
+
+CREATE TABLE IF NOT EXISTS pool_game_raises (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER REFERENCES pool_games(id) ON DELETE CASCADE,
+    player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+    raise_amount DECIMAL(15, 2) NOT NULL,
+    new_pot DECIMAL(15, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_game_events (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER REFERENCES pool_games(id) ON DELETE CASCADE,
+    player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL, -- 'ball_sunk', 'shot', 'scratch', 'win', 'raise'
+    event_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indices for performance
+CREATE INDEX IF NOT EXISTS idx_pool_games_table_id ON pool_games(table_id);
+CREATE INDEX IF NOT EXISTS idx_pool_games_creator_id ON pool_games(creator_id);
+CREATE INDEX IF NOT EXISTS idx_pool_games_status ON pool_games(status);
+CREATE INDEX IF NOT EXISTS idx_pool_game_players_game_id ON pool_game_players(game_id);
+CREATE INDEX IF NOT EXISTS idx_pool_game_players_player_id ON pool_game_players(player_id);
+CREATE INDEX IF NOT EXISTS idx_pool_game_raises_game_id ON pool_game_raises(game_id);

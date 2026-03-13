@@ -35,6 +35,7 @@ import Dice from "./pages/Dice";
 import Plinko from "./pages/Plinko";
 import Community from "./pages/Community";
 import PoolShark from "./pages/PoolShark";
+import PoolGamePage from "./pages/PoolGamePage";
 import Referrals from "./pages/Referrals";
 import VIP from "./pages/VIP";
 import CoinKrazyCoinUp from "./pages/CoinKrazyCoinUp";
@@ -176,6 +177,14 @@ const AppRoutes = () => (
       element={
         <Layout>
           <PoolShark />
+        </Layout>
+      }
+    />
+    <Route
+      path="/pool/game/:gameId"
+      element={
+        <Layout>
+          <PoolGamePage />
         </Layout>
       }
     />
