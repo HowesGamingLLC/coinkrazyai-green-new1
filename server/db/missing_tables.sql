@@ -523,6 +523,85 @@ CREATE TABLE IF NOT EXISTS pool_game_events (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Pool Challenge & Matchmaking System
+CREATE TABLE IF NOT EXISTS pool_challenges (
+    id SERIAL PRIMARY KEY,
+    challenger_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    opponent_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    buy_in_amount DECIMAL(15, 2) NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'accepted', 'declined', 'expired', 'completed'
+    game_id INTEGER REFERENCES pool_games(id) ON DELETE SET NULL,
+    winner_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    message TEXT,
+    expires_at TIMESTAMP,
+    accepted_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_player_stats (
+    id SERIAL PRIMARY KEY,
+    player_id INTEGER NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+    total_games_played INTEGER DEFAULT 0,
+    total_games_won INTEGER DEFAULT 0,
+    win_rate DECIMAL(5, 2) DEFAULT 0,
+    total_earnings DECIMAL(15, 2) DEFAULT 0,
+    total_wagered DECIMAL(15, 2) DEFAULT 0,
+    highest_win DECIMAL(15, 2) DEFAULT 0,
+    current_streak INTEGER DEFAULT 0,
+    longest_streak INTEGER DEFAULT 0,
+    elo_rating INTEGER DEFAULT 1000,
+    rank INTEGER,
+    skill_level VARCHAR(50) DEFAULT 'beginner', -- beginner, intermediate, advanced, expert
+    level INTEGER DEFAULT 1,
+    experience_points INTEGER DEFAULT 0,
+    achievements JSONB DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_leaderboard (
+    id SERIAL PRIMARY KEY,
+    player_id INTEGER NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+    username VARCHAR(255) NOT NULL,
+    elo_rating INTEGER DEFAULT 1000,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    rank INTEGER,
+    win_percentage DECIMAL(5, 2) DEFAULT 0,
+    total_earnings DECIMAL(15, 2) DEFAULT 0,
+    period VARCHAR(50) DEFAULT 'alltime', -- 'daily', 'weekly', 'monthly', 'alltime'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_admin_actions (
+    id SERIAL PRIMARY KEY,
+    admin_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,
+    action_type VARCHAR(100) NOT NULL, -- 'suspend_player', 'refund', 'investigate', 'adjust_odds', 'warning'
+    target_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    target_game_id INTEGER REFERENCES pool_games(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    details JSONB,
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'completed'
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_game_fair_play_audit (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER NOT NULL REFERENCES pool_games(id) ON DELETE CASCADE,
+    audit_type VARCHAR(100) NOT NULL, -- 'manual_review', 'automated_check', 'complaint_investigation'
+    findings TEXT,
+    flagged BOOLEAN DEFAULT FALSE,
+    severity VARCHAR(50), -- 'low', 'medium', 'high', 'critical'
+    action_taken TEXT,
+    created_by INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_pool_games_table_id ON pool_games(table_id);
 CREATE INDEX IF NOT EXISTS idx_pool_games_creator_id ON pool_games(creator_id);
@@ -530,3 +609,10 @@ CREATE INDEX IF NOT EXISTS idx_pool_games_status ON pool_games(status);
 CREATE INDEX IF NOT EXISTS idx_pool_game_players_game_id ON pool_game_players(game_id);
 CREATE INDEX IF NOT EXISTS idx_pool_game_players_player_id ON pool_game_players(player_id);
 CREATE INDEX IF NOT EXISTS idx_pool_game_raises_game_id ON pool_game_raises(game_id);
+CREATE INDEX IF NOT EXISTS idx_pool_challenges_challenger ON pool_challenges(challenger_id);
+CREATE INDEX IF NOT EXISTS idx_pool_challenges_opponent ON pool_challenges(opponent_id);
+CREATE INDEX IF NOT EXISTS idx_pool_challenges_status ON pool_challenges(status);
+CREATE INDEX IF NOT EXISTS idx_pool_leaderboard_rank ON pool_leaderboard(rank);
+CREATE INDEX IF NOT EXISTS idx_pool_leaderboard_elo ON pool_leaderboard(elo_rating DESC);
+CREATE INDEX IF NOT EXISTS idx_pool_admin_actions_player ON pool_admin_actions(target_player_id);
+CREATE INDEX IF NOT EXISTS idx_pool_admin_actions_game ON pool_admin_actions(target_game_id);

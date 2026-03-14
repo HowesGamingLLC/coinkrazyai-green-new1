@@ -90,6 +90,15 @@ import {
   handleEndPoolGame
 } from "./routes/pool";
 import {
+  handleSendChallenge,
+  handleGetChallenges,
+  handleAcceptChallenge,
+  handleDeclineChallenge,
+  handleGetPoolStats,
+  handleGetPoolLeaderboard,
+  handleFindOpponents
+} from "./routes/pool-challenges";
+import {
   handleGetBingoRooms,
   handleBuyBingoTicket,
   handleMarkNumber,
@@ -548,6 +557,15 @@ export function createServer() {
   app.get("/api/pool/game/:gameId", handleGetPoolGame);
   app.post("/api/pool/raise-bet", verifyPlayer, handleRaiseBet);
   app.post("/api/pool/end-game", verifyPlayer, handleEndPoolGame);
+
+  // ===== POOL CHALLENGES =====
+  app.post("/api/pool/challenge/send", verifyPlayer, handleSendChallenge);
+  app.get("/api/pool/challenges", verifyPlayer, handleGetChallenges);
+  app.post("/api/pool/challenge/accept", verifyPlayer, handleAcceptChallenge);
+  app.post("/api/pool/challenge/decline", verifyPlayer, handleDeclineChallenge);
+  app.get("/api/pool/stats/:playerId?", handleGetPoolStats);
+  app.get("/api/pool/leaderboard", handleGetPoolLeaderboard);
+  app.post("/api/pool/find-opponents", verifyPlayer, handleFindOpponents);
 
   // ===== BINGO ROUTES =====
   app.get("/api/bingo/rooms", handleGetBingoRooms);

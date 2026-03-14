@@ -9,7 +9,7 @@ import { Loader2, Users, TrendingUp, Trophy, Share2, Copy, Check, ArrowLeft } fr
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { useWallet } from '@/hooks/use-wallet';
-import PoolGameEngine from '@/components/pool/PoolGameEngine';
+import ImprovedPoolGameEngine from '@/components/pool/ImprovedPoolGameEngine';
 import confetti from 'canvas-confetti';
 
 interface GamePlayer {
@@ -254,7 +254,7 @@ const PoolGamePage = () => {
           {/* Game Engine */}
           <div className="lg:col-span-3">
             {gameData.status !== 'finished' ? (
-              <PoolGameEngine
+              <ImprovedPoolGameEngine
                 gameId={gameData.id}
                 players={gameData.players}
                 currentPlayerId={user?.id || ''}

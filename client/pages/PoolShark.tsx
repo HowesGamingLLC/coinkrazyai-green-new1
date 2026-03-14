@@ -5,11 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trophy, Users, DollarSign, ArrowLeft, Play, Plus, Loader2, AlertCircle } from 'lucide-react';
+import { Trophy, Users, DollarSign, ArrowLeft, Play, Plus, Loader2, AlertCircle, BarChart3 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { useWallet } from '@/hooks/use-wallet';
+import PoolChallenge from '@/components/pool/PoolChallenge';
+import PoolLeaderboard from '@/components/pool/PoolLeaderboard';
+import PoolPlayerStats from '@/components/pool/PoolPlayerStats';
 
 interface PoolTable {
   id: number;
@@ -23,17 +26,13 @@ interface PoolTable {
   createdAt: string;
 }
 
-interface CreateGameRequest {
-  minBuyIn: number;
-  maxBuyIn: number;
-  buyInAmount: number;
-}
+type TabType = 'tables' | 'challenges' | 'stats' | 'leaderboard';
 
 const PoolShark = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { sweepsCoins, refreshWallet } = useWallet();
-  
+
   const [tables, setTables] = useState<PoolTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
@@ -42,21 +41,24 @@ const PoolShark = () => {
   const [buyInAmount, setBuyInAmount] = useState<number>(10);
   const [creatingGame, setCreatingGame] = useState(false);
   const [newGameBuyIn, setNewGameBuyIn] = useState<number>(10);
+  const [activeTab, setActiveTab] = useState<TabType>('tables');
 
   useEffect(() => {
     if (!user) {
       navigate('/login');
       return;
     }
-    fetchTables();
-  }, [user, navigate]);
+    if (activeTab === 'tables') {
+      fetchTables();
+    }
+  }, [user, navigate, activeTab]);
 
   const fetchTables = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/pool/tables');
       const data = await response.json();
-      
+
       if (data.success) {
         setTables(data.data || []);
       } else {
@@ -158,6 +160,129 @@ const PoolShark = () => {
     }
   };
 
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'tables':
+        return (
+          <div className="space-y-4">
+            {/* Action Buttons */}
+            <div className="flex gap-4 justify-center flex-wrap">
+              <Button
+                size="lg"
+                className="h-14 px-8 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-xl shadow-lg shadow-blue-500/30"
+                onClick={() => setShowCreateDialog(true)}
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create New Table
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-14 px-8 border-slate-600 hover:bg-slate-800 font-black text-lg rounded-xl"
+                onClick={fetchTables}
+              >
+                Refresh Tables
+              </Button>
+            </div>
+
+            {/* Available Tables */}
+            <div className="space-y-4">
+              <h2 className="text-3xl font-black text-white uppercase tracking-tight">Available Tables</h2>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                </div>
+              ) : tables.length === 0 ? (
+                <Card className="border-slate-700 bg-slate-900/50">
+                  <CardContent className="p-8 text-center">
+                    <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                    <p className="text-slate-400 text-lg mb-4">No tables available</p>
+                    <Button
+                      onClick={() => setShowCreateDialog(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Create the First Table
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {tables.map((table) => (
+                    <Card
+                      key={table.id}
+                      className="border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 transition-all cursor-pointer"
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-lg text-white">{table.name}</CardTitle>
+                          <Badge className={`${getStatusColor(table.status)} border`}>
+                            {table.status === 'waiting' && 'Waiting'}
+                            {table.status === 'in-progress' && 'In Progress'}
+                            {table.status === 'finished' && 'Finished'}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-slate-400 font-bold uppercase text-xs">Buy-In Range</p>
+                            <p className="text-white font-bold text-lg">
+                              ${table.minBuyIn} - ${table.maxBuyIn}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 font-bold uppercase text-xs">Players</p>
+                            <p className="text-white font-bold text-lg">
+                              {table.playersInGame}/{table.maxPlayers}
+                            </p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-slate-400 font-bold uppercase text-xs">Pot</p>
+                            <p className="text-yellow-400 font-black text-xl">
+                              {table.currentPot.toFixed(2)} SC
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          className="w-full bg-green-600 hover:bg-green-700 font-bold"
+                          disabled={
+                            table.playersInGame >= table.maxPlayers ||
+                            table.status === 'finished'
+                          }
+                          onClick={() => {
+                            setSelectedTable(table);
+                            setBuyInAmount(table.minBuyIn);
+                            setShowJoinDialog(true);
+                          }}
+                        >
+                          <Play className="w-4 h-4 mr-2" />
+                          Join Table
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'challenges':
+        return <PoolChallenge />;
+
+      case 'stats':
+        return <PoolPlayerStats />;
+
+      case 'leaderboard':
+        return <PoolLeaderboard />;
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 py-8 px-4">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -188,10 +313,10 @@ const PoolShark = () => {
                 <Trophy className="w-12 h-12 text-yellow-400 animate-bounce" />
               </div>
               <p className="text-xl md:text-2xl text-slate-300 font-bold uppercase tracking-tight italic">
-                Join Premium Pool Tables on PlayCoinKrazy
+                Challenge Players & Compete on PlayCoinKrazy
               </p>
               <p className="text-slate-400 max-w-2xl mx-auto">
-                Play competitive 8-ball with other players. Winner takes all! House fee: 0.50 SC per game.
+                Play competitive 8-ball with other players. Challenge friends, climb the leaderboard, and become the ultimate Pool Shark!
               </p>
               <div className="flex gap-4 justify-center pt-4">
                 <Badge variant="outline" className="border-green-500 bg-green-500/10">
@@ -200,114 +325,36 @@ const PoolShark = () => {
                 </Badge>
                 <Badge variant="outline" className="border-blue-500 bg-blue-500/10">
                   <Users className="w-3 h-3 mr-1" />
-                  Multiplayer
+                  Multiplayer Challenges
                 </Badge>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 justify-center flex-wrap">
-          <Button
-            size="lg"
-            className="h-14 px-8 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-xl shadow-lg shadow-blue-500/30"
-            onClick={() => setShowCreateDialog(true)}
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Create New Table
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-14 px-8 border-slate-600 hover:bg-slate-800 font-black text-lg rounded-xl"
-            onClick={fetchTables}
-          >
-            Refresh Tables
-          </Button>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 flex-wrap justify-center">
+          {(['tables', 'challenges', 'stats', 'leaderboard'] as const).map((tab) => (
+            <Button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`font-bold rounded-xl ${
+                activeTab === tab
+                  ? 'bg-blue-600 hover:bg-blue-700'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              {tab === 'tables' && <Play className="w-4 h-4 mr-2" />}
+              {tab === 'challenges' && <Users className="w-4 h-4 mr-2" />}
+              {tab === 'stats' && <BarChart3 className="w-4 h-4 mr-2" />}
+              {tab === 'leaderboard' && <Trophy className="w-4 h-4 mr-2" />}
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </Button>
+          ))}
         </div>
 
-        {/* Available Tables */}
-        <div className="space-y-4">
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">Available Tables</h2>
-          
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-            </div>
-          ) : tables.length === 0 ? (
-            <Card className="border-slate-700 bg-slate-900/50">
-              <CardContent className="p-8 text-center">
-                <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-400 text-lg mb-4">No tables available</p>
-                <Button
-                  onClick={() => setShowCreateDialog(true)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Create the First Table
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tables.map((table) => (
-                <Card
-                  key={table.id}
-                  className="border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 transition-all cursor-pointer"
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg text-white">{table.name}</CardTitle>
-                      <Badge className={`${getStatusColor(table.status)} border`}>
-                        {table.status === 'waiting' && 'Waiting'}
-                        {table.status === 'in-progress' && 'In Progress'}
-                        {table.status === 'finished' && 'Finished'}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-slate-400 font-bold uppercase text-xs">Buy-In Range</p>
-                        <p className="text-white font-bold text-lg">
-                          ${table.minBuyIn} - ${table.maxBuyIn}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400 font-bold uppercase text-xs">Players</p>
-                        <p className="text-white font-bold text-lg">
-                          {table.playersInGame}/{table.maxPlayers}
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-slate-400 font-bold uppercase text-xs">Pot</p>
-                        <p className="text-yellow-400 font-black text-xl">
-                          {table.currentPot.toFixed(2)} SC
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button
-                      className="w-full bg-green-600 hover:bg-green-700 font-bold"
-                      disabled={
-                        table.playersInGame >= table.maxPlayers ||
-                        table.status === 'finished'
-                      }
-                      onClick={() => {
-                        setSelectedTable(table);
-                        setBuyInAmount(table.minBuyIn);
-                        setShowJoinDialog(true);
-                      }}
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      Join Table
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Tab Content */}
+        {renderTabContent()}
       </div>
 
       {/* Join Table Dialog */}
